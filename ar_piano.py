@@ -41,27 +41,34 @@ def get_key_pos(midi_note):
     y = BLACK_Y if is_black else WHITE_Y
     return x, y, is_black, rel_white_idx
 
-# ペンタトニックに絞り込んだジャズ進行
+# ジャズの超大定番「枯葉」風の8小節進行
+# 各コードにつき「Root, 3rd, 7th, 最高のテンション(9th/13th等)」の厳選された4音だけが光ります。
 scenario = [
-    {
-        "time": 0, 
-        "chord": "Dm9 (D Min Pentatonic)", 
-        "pitch_classes": [2, 5, 7, 9, 0], 
-        "color": (255, 150, 50)  # 青
-    },
-    {
-        "time": 4, 
-        "chord": "G7alt (Bb Min Pentatonic)", 
-        "pitch_classes": [10, 1, 3, 5, 8], 
-        "color": (50, 100, 255)  # 赤・オレンジ
-    },
-    {
-        "time": 8, 
-        "chord": "Cmaj9 (C Maj Pentatonic)", 
-        "pitch_classes": [0, 2, 4, 7, 9], 
-        "color": (150, 255, 100) # グリーン
-    }
+    # 1. Dm9 (青) - 切ないスタート
+    {"time": 0,  "chord": "Dm9", "pitch_classes": [2, 5, 0, 4], "color": (255, 150, 50)},
+    
+    # 2. G13 (水色) - 少し明るく展開
+    {"time": 4,  "chord": "G13", "pitch_classes": [7, 11, 5, 4], "color": (255, 200, 50)},
+    
+    # 3. Cmaj9 (緑) - 一旦スッキリと解決
+    {"time": 8,  "chord": "Cmaj9", "pitch_classes": [0, 4, 11, 2], "color": (150, 255, 100)},
+    
+    # 4. Fmaj9 (黄緑) - さらにフワッと浮遊感
+    {"time": 12, "chord": "Fmaj9", "pitch_classes": [5, 9, 4, 7], "color": (50, 255, 200)},
+    
+    # 5. Bm7b5 (紫) - マイナー調への不穏な入り口
+    {"time": 16, "chord": "Bm7b5", "pitch_classes": [11, 2, 5, 9], "color": (200, 100, 255)},
+    
+    # 6. E7(b9) (赤紫) - 強烈なジャズの緊張感（黒鍵多め）
+    {"time": 20, "chord": "E7(b9)", "pitch_classes": [4, 8, 2, 5], "color": (150, 50, 255)},
+    
+    # 7. Am9 (オレンジ) - 暗く美しい解決
+    {"time": 24, "chord": "Am9", "pitch_classes": [9, 0, 7, 11], "color": (50, 150, 255)},
+    
+    # 8. A7(#9) (赤) - 最初のDm9へ戻るための劇的なターンアラウンド
+    {"time": 28, "chord": "A7(#9)", "pitch_classes": [9, 1, 7, 0], "color": (50, 50, 255)}
 ]
+
 
 start_time = time.time()
 
@@ -70,7 +77,7 @@ while True:
     if not success:
         break
 
-    elapsed_time = (time.time() - start_time) % 12
+    elapsed_time = (time.time() - start_time) % 32
     
     current_idx = 0
     for i, state in enumerate(scenario):
