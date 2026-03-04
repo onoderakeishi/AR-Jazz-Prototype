@@ -42,27 +42,27 @@ def get_key_pos(midi_note):
     y = BLACK_Y if is_black else WHITE_Y
     return x, y, is_black, rel_white_idx
 
-# 構成音（ピッチクラス：0=C, 1=C#, 2=D... 11=B）を指定する
+# 構成音を7音から5音（ペンタトニック）に厳選し、迷いをなくす
 scenario = [
     {
         "time": 0, 
-        "chord": "Dm9 (D Dorian)", 
-        # D, E, F, G, A, B, C (白鍵メイン)
-        "pitch_classes": [2, 4, 5, 7, 9, 11, 0], 
+        "chord": "Dm9 (D Min Pentatonic)", 
+        # D, F, G, A, C (白鍵の中の5音。絶対に外さない魔法の5音)
+        "pitch_classes": [2, 5, 7, 9, 0], 
         "color": (255, 150, 50)  # 青
     },
     {
         "time": 4, 
-        "chord": "G7alt (G Altered)", 
-        # G, Ab, Bb, B, Db, Eb, F (黒鍵が大量に入るジャズ特有のスケール)
-        "pitch_classes": [7, 8, 10, 11, 1, 3, 5], 
+        "chord": "G7alt (Bb Min Pentatonic)", 
+        # Bb, Db, Eb, F, Ab (ジャズの裏技。G7の上でBbマイナーペンタを弾くと超絶オシャレなオルタードになる)
+        "pitch_classes": [10, 1, 3, 5, 8], 
         "color": (50, 100, 255)  # 赤・オレンジ系
     },
     {
         "time": 8, 
-        "chord": "Cmaj9 (C Lydian)", 
-        # C, D, E, F#, G, A, B (F#の黒鍵が1つ入るオシャレな響き)
-        "pitch_classes": [0, 2, 4, 6, 7, 9, 11], 
+        "chord": "Cmaj9 (C Maj Pentatonic)", 
+        # C, D, E, G, A (明るくスッキリした解決の5音)
+        "pitch_classes": [0, 2, 4, 7, 9], 
         "color": (150, 255, 100) # グリーン
     }
 ]
