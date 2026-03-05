@@ -4,7 +4,7 @@ import time
 cap = cv2.VideoCapture(1)
 
 # ==========================================
-# 🔴 先ほどピッタリ合ったキャリブレーションの数字をここに入れてください
+# 🔴 あなたのキャリブレーション設定を入れてください
 # ==========================================
 START_X = 0  
 END_X = 700    
@@ -16,11 +16,8 @@ VISIBLE_WHITE_KEYS = 32
 LEFT_MIDI = 48  
 # ==========================================
 
-def get_note_name(midi_note):
-    note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-    name = note_names[midi_note % 12]
-    octave = (midi_note // 12) - 1
-    return f"{name}{octave}"
+FALL_SPEED = 150
+BAR_WIDTH_ADJUST = 0.8
 
 def get_white_idx_and_is_black(midi_note):
     octave = midi_note // 12
@@ -32,109 +29,129 @@ def get_white_idx_and_is_black(midi_note):
 def get_key_pos(midi_note):
     left_abs_idx, _ = get_white_idx_and_is_black(LEFT_MIDI)
     abs_white_idx, is_black = get_white_idx_and_is_black(midi_note)
-    
     rel_white_idx = abs_white_idx - left_abs_idx
     key_width = (END_X - START_X) / VISIBLE_WHITE_KEYS
     visual_idx = rel_white_idx + 1.0 if is_black else rel_white_idx + 0.5
-    
     x = int(START_X + visual_idx * key_width)
     y = BLACK_Y if is_black else WHITE_Y
-    return x, y, is_black, rel_white_idx
+    return x, y, is_black, rel_white_idx, key_width
 
-# ジャズの超大定番「枯葉」風の8小節進行
-# 各コードにつき「Root, 3rd, 7th, 最高のテンション(9th/13th等)」の厳選された4音だけが光ります。
-scenario = [
-    # 1. Dm9 (青) - 切ないスタート
-    {"time": 0,  "chord": "Dm9", "pitch_classes": [2, 5, 0, 4], "color": (255, 150, 50)},
-    
-    # 2. G13 (水色) - 少し明るく展開
-    {"time": 4,  "chord": "G13", "pitch_classes": [7, 11, 5, 4], "color": (255, 200, 50)},
-    
-    # 3. Cmaj9 (緑) - 一旦スッキリと解決
-    {"time": 8,  "chord": "Cmaj9", "pitch_classes": [0, 4, 11, 2], "color": (150, 255, 100)},
-    
-    # 4. Fmaj9 (黄緑) - さらにフワッと浮遊感
-    {"time": 12, "chord": "Fmaj9", "pitch_classes": [5, 9, 4, 7], "color": (50, 255, 200)},
-    
-    # 5. Bm7b5 (紫) - マイナー調への不穏な入り口
-    {"time": 16, "chord": "Bm7b5", "pitch_classes": [11, 2, 5, 9], "color": (200, 100, 255)},
-    
-    # 6. E7(b9) (赤紫) - 強烈なジャズの緊張感（黒鍵多め）
-    {"time": 20, "chord": "E7(b9)", "pitch_classes": [4, 8, 2, 5], "color": (150, 50, 255)},
-    
-    # 7. Am9 (オレンジ) - 暗く美しい解決
-    {"time": 24, "chord": "Am9", "pitch_classes": [9, 0, 7, 11], "color": (50, 150, 255)},
-    
-    # 8. A7(#9) (赤) - 最初のDm9へ戻るための劇的なターンアラウンド
-    {"time": 28, "chord": "A7(#9)", "pitch_classes": [9, 1, 7, 0], "color": (50, 50, 255)}
+# === LLMによるアレンジ生成を模した3つのパターン ===
+
+# パターン1：Normal (標準)
+melody_normal = [
+    {"time": 2.0, "note": 60, "duration": 0.5}, {"time": 2.5, "note": 60, "duration": 0.5},
+    {"time": 3.0, "note": 67, "duration": 0.5}, {"time": 3.5, "note": 67, "duration": 0.5},
+    {"time": 4.0, "note": 69, "duration": 0.5}, {"time": 4.5, "note": 69, "duration": 0.5},
+    {"time": 5.0, "note": 67, "duration": 1.0},
 ]
 
+# パターン2：Super Easy (超初心者向け・ゆっくり単音)
+melody_easy = [
+    {"time": 2.0, "note": 60, "duration": 1.0}, # ド (ゆっくり)
+    {"time": 4.0, "note": 67, "duration": 1.0}, # ソ
+    {"time": 6.0, "note": 69, "duration": 1.0}, # ラ
+]
 
-start_time = time.time()
+# パターン3：Jazz Bossa (ジャズアレンジ・和音と裏拍)
+melody_jazz = [
+    {"time": 2.0, "note": 60, "duration": 0.5}, {"time": 2.5, "note": 60, "duration": 0.5},
+    {"time": 3.0, "note": 67, "duration": 0.5}, {"time": 3.5, "note": 67, "duration": 0.5},
+    {"time": 3.75, "note": 59, "duration": 0.25}, {"time": 3.75, "note": 64, "duration": 0.25}, # 合いの手
+    {"time": 4.0, "note": 69, "duration": 0.5}, {"time": 4.5, "note": 69, "duration": 0.5},
+    {"time": 5.0, "note": 67, "duration": 1.0},
+    {"time": 5.5, "note": 55, "duration": 0.5}, {"time": 5.5, "note": 62, "duration": 0.5}, # 合いの手
+]
+
+# 初期状態
+current_melody = melody_normal
+prompt_text = "Prompt: Normal"
+prompt_color = (255, 255, 255)
+
+is_playing = False
+start_time = 0
 
 while True:
     success, img = cap.read()
     if not success:
         break
 
-    elapsed_time = (time.time() - start_time) % 32
-    
-    current_idx = 0
-    for i, state in enumerate(scenario):
-        if elapsed_time >= state["time"]:
-            current_idx = i
-            
-    current_state = scenario[current_idx]
-    # 「次のコード」を取得
-    next_state = scenario[(current_idx + 1) % len(scenario)]
+    if not is_playing:
+        cv2.putText(img, "Press 1:Normal, 2:Easy, 3:Jazz  (SPACE to Start)", (20, 100), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        cv2.imshow("AR Piano - LLM Prompt Arranger", img)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord(' '):
+            is_playing = True
+            start_time = time.time()
+        elif key == ord('q'):
+            break
+        continue
 
+    current_time = time.time() - start_time
     overlay = img.copy()
 
-    for midi_note in range(LEFT_MIDI - 5, LEFT_MIDI + 65):
-        x, y, is_black, rel_white_idx = get_key_pos(midi_note)
+    # ヒットライン
+    cv2.line(overlay, (START_X, WHITE_Y), (END_X, WHITE_Y), (255, 255, 255), 1)
+
+    # 降ってくるバーの描画処理
+    for item in current_melody:
+        note_time = item["time"]
+        note_duration = item["duration"]
+        midi_note = item["note"]
+        
+        x, hit_y, is_black, rel_white_idx, key_width = get_key_pos(midi_note)
         
         if 0 <= rel_white_idx <= VISIBLE_WHITE_KEYS and START_X <= x <= END_X + 15:
-            r = BLACK_RADIUS if is_black else WHITE_RADIUS
-            note_name = get_note_name(midi_note)
-            pitch_class = midi_note % 12
+            bar_bottom_y = hit_y - int((note_time - current_time) * FALL_SPEED)
+            bar_top_y = bar_bottom_y - int(note_duration * FALL_SPEED)
             
-            is_current = pitch_class in current_state["pitch_classes"]
-            is_next = pitch_class in next_state["pitch_classes"]
-            
-            # --- 描画の優先順位（UIの階層化） ---
-            
-            if is_current:
-                # 1. 今のコード（最も目立つ：鮮やかなベタ塗り＋白いコア）
-                cv2.circle(overlay, (x, y), r + 2, current_state["color"], cv2.FILLED)
-                cv2.circle(overlay, (x, y), int(r * 0.5), (255, 255, 255), cv2.FILLED)
-                cv2.putText(overlay, note_name, (x - 12, y - 15), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
-                            
-            elif is_next:
-                # 2. 次のコードの予兆（控えめ：次の色の細いリングのみ）
-                # 色を少し暗くする計算
-                dim_color = tuple(int(c * 0.7) for c in next_state["color"])
-                cv2.circle(overlay, (x, y), r, dim_color, 2) # 太さ2のリング
-                cv2.putText(overlay, note_name, (x - 10, y - 12), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.3, dim_color, 1)
-                            
-            else:
-                # 3. どちらでもない関係ない音（極薄グレーで背景に溶け込ませる）
-                cv2.circle(overlay, (x, y), r, (70, 70, 70), 1)
+            if bar_bottom_y > 0 and bar_top_y < img.shape[0]:
+                if note_time <= current_time <= note_time + note_duration:
+                    color = (100, 255, 100) # 発光
+                    cv2.circle(overlay, (x, hit_y), 15, color, cv2.FILLED)
+                else:
+                    color = (255, 200, 50)
+                
+                bar_w = int(key_width * BAR_WIDTH_ADJUST)
+                x1 = x - bar_w // 2
+                x2 = x + bar_w // 2
+                
+                cv2.rectangle(overlay, (x1, max(0, bar_top_y)), (x2, bar_bottom_y), color, cv2.FILLED)
+                cv2.rectangle(overlay, (x1, max(0, bar_top_y)), (x2, bar_bottom_y), (255, 255, 255), 1)
 
-    alpha = 0.8
+    alpha = 0.7
     img = cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
+    
+    # AIがアレンジしている感を出すUIテキスト
+    cv2.putText(img, "AI Style-Transfer Mode", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+    cv2.putText(img, prompt_text, (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, prompt_color, 2)
 
-    # 画面上部のUIテキストも「今」と「次」を表示
-    cv2.putText(img, f"Now Playing: {current_state['chord']}", (20, 40), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, current_state["color"], 2)
-    cv2.putText(img, f"Next (Prep): {next_state['chord']}", (20, 75), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, next_state["color"], 1)
+    cv2.imshow("AR Piano - LLM Prompt Arranger", img)
 
-    cv2.imshow("AR Jazz Session - Foreshadowing UI", img)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    # キーボード入力で「プロンプト」を切り替え、時間をリセット
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('1'):
+        current_melody = melody_normal
+        prompt_text = 'Prompt: "Play normally"'
+        prompt_color = (255, 255, 255)
+        start_time = time.time()
+    elif key == ord('2'):
+        current_melody = melody_easy
+        prompt_text = 'Prompt: "Make it Super Easy for beginners"'
+        prompt_color = (50, 255, 100)
+        start_time = time.time()
+    elif key == ord('3'):
+        current_melody = melody_jazz
+        prompt_text = 'Prompt: "Arrange it like a Jazz Bossa Nova"'
+        prompt_color = (100, 100, 255)
+        start_time = time.time()
+    elif key == ord('q'):
         break
+
+    # ループ処理
+    if current_time > 8:
+        start_time = time.time()
 
 cap.release()
 cv2.destroyAllWindows()
